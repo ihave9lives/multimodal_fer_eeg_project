@@ -1,0 +1,104 @@
+# Multimodal FER + EEG Deception Detection Configuration
+
+# Data paths
+data:
+  image_root: "D:/archive/images"  # Path to extracted images
+  metadata_csv: "D:/archive/emotions.csv"
+  eeg_root: null  # Set when real EEG data is available
+  num_workers: 4
+  pin_memory: true
+
+# Image preprocessing
+vision:
+  image_size: [224, 224]
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+  augment:
+    horizontal_flip: 0.5
+    random_affine_degrees: 15
+    color_jitter: 0.2
+
+# EEG preprocessing
+eeg:
+  num_channels: 32  # Standard 10-20 system
+  sampling_rate: 256  # Hz
+  window_seconds: 4
+  bands:
+    - name: "theta"
+      low: 4
+      high: 8
+    - name: "alpha"
+      low: 8
+      high: 13
+    - name: "beta"
+      low: 13
+      high: 30
+    - name: "gamma"
+      low: 30
+      high: 45
+
+# Model architecture
+model:
+  latent_dim: 256
+  num_emotion_classes: 8
+  emotion_labels: ["Anger", "Contempt", "Disgust", "Fear", "Happy", "Neutral", "Sad", "Surprised"]
+  
+  # Visual stream
+  visual:
+    backbone: "resnet18"  # or "custom_cnn"
+    pretrained: true
+    freeze_backbone: false
+    attention: "cbam"  # none, cbam, spatial
+  
+  # EEG stream
+  eeg:
+    architecture: "1dcnn_bilstm"  # or "1d_resnet"
+    cnn_channels: [64, 128, 256]
+    lstm_hidden: 256
+    lstm_layers: 2
+    dropout: 0.3
+  
+  # Fusion
+  fusion:
+    type: "cross_attention"  # concat, cross_attention, bilinear
+    num_heads: 4
+    dropout: 0.2
+  
+  # Deception/Incongruence head
+  deception:
+    type: "similarity_binary"  # similarity_binary, distance_threshold, mlp_classifier
+    similarity_metric: "cosine"  # cosine, euclidean
+    threshold: 0.7
+
+# Training
+training:
+  batch_size: 32
+  epochs: 100
+  lr: 1e-4
+  weight_decay: 1e-5
+  scheduler: "cosine_annealing"
+  warmup_epochs: 5
+  mixed_precision: true
+  gradient_clip: 1.0
+  seed: 42
+  device: "auto"  # auto, cuda, cpu
+
+# Loss weights
+loss:
+  alpha: 1.0   # L_face (FER classification)
+  beta: 1.0    # L_eeg (EEG valence/arousal)
+  gamma: 1.0   # L_fusion (fused emotion classification)
+  lambda_: 0.5 # L_congruence (deception/incongruence)
+
+# Validation
+validation:
+  split_ratio: 0.2
+  stratify: true
+  metrics: ["accuracy", "f1_macro", "auc_roc", "confusion_matrix"]
+
+# Output
+output:
+  save_dir: "./checkpoints"
+  log_dir: "./logs"
+  save_best_only: true
+  export_onnx: false
